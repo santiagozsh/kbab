@@ -13,11 +13,14 @@ func main() {
 		targetDir = os.Args[1]
 	}
 
-	projectType, err := detector.Detect(targetDir)
+	cfg, err := detector.Detect(targetDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("project detector success!!: %s\n", projectType)
+	fmt.Println("🚀 Project detected successfully!")
+	fmt.Printf("  Type:            %s\n", cfg.Type)
+	fmt.Printf("  Runtime Version: %s\n", cfg.RuntimeVersion)
+	fmt.Printf("  Package Manager: %s\n", cfg.PackageManager)
 }

@@ -1,9 +1,12 @@
+// Package detector provides workspace inspection and runtime metadata
+// extraction for containerization targets.
 package detector
 
 import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type ProjectType string
@@ -14,6 +17,53 @@ const (
 	Node    ProjectType = "node"
 	Unknown ProjectType = "unknown"
 )
+
+type PackageManager string
+
+const (
+	Npm  PackageManager = "npm"
+	Pnpm PackageManager = "pnpm"
+	Yarn PackageManager = "yarn"
+	Bun  PackageManager = "bun"
+	None PackageManager = "none"
+)
+
+type ProjectConfig struct {
+	Type           ProjectType
+	RuntimeVersion string
+	PackageManager PackageManager
+}
+
+var (
+	ErrUnsupportedProject = errors.New("unsupported project type")
+	ErrInvalidConfig      = errors.New("invalid project configuration")
+)
+
+func Detect(targetDir string) (ProjectConfig, error) {
+	for _, r := range defaultRule {
+		path := filepath.Join(targetDir, r.filename)
+		exists, err := fileExists(path)
+		if err != nil {
+			return ProjectConfig{}, err
+		}
+
+		if exists {
+			switch r.project {
+			case Go:
+				version, err := parseGoMod(path)
+				if err != nil {
+					return ProjectConfig{}, err
+				}
+				return ProjectConfig{
+					Type:           Go,
+					RuntimeVersion: version,
+					PackageManager: None,
+				}, nil
+			}
+		}
+	}
+	return ProjectConfig{}, ErrUnsupportedProject
+}
 
 type rule struct {
 	filename string
@@ -27,6 +77,23 @@ var defaultRule = []rule{
 	{filename: "pyproject.toml", project: Python},
 }
 
+func parseGoMod(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	content := string(data)
+
+	for line := range strings.SplitSeq(content, "\n") {
+		line = strings.TrimSpace(line)
+		if version, ok := strings.CutPrefix(line, "go "); ok {
+			return version, nil
+		}
+
+	}
+	return "", ErrInvalidConfig
+}
+
 func fileExists(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err != nil {
@@ -38,19 +105,4 @@ func fileExists(path string) (bool, error) {
 		return false, err
 	}
 	return true, nil
-}
-
-func Detect(targetDir string) (ProjectType, error) {
-	for _, r := range defaultRule {
-		path := filepath.Join(targetDir, r.filename)
-		exists, err := fileExists(path)
-		if err != nil {
-			return Unknown, err
-		}
-
-		if exists {
-			return r.project, nil
-		}
-	}
-	return Unknown, errors.New("file its not compatiable with the directory")
 }
