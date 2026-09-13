@@ -46,6 +46,11 @@ var (
 	ErrInvalidConfig      = errors.New("invalid project configuration")
 )
 
+type rule struct {
+	filename string
+	project  ProjectType
+}
+
 var defaultRules = []rule{
 	{filename: "go.mod", project: Go},
 	{filename: "package.json", project: Node},
@@ -58,6 +63,7 @@ func Detect(targetDir string) (ProjectConfig, error) {
 		path := filepath.Join(targetDir, r.filename)
 		exists, err := fileExists(path)
 		if err != nil {
+			// TODO: implement custom message on err
 			return ProjectConfig{}, err
 		}
 
@@ -73,11 +79,6 @@ func Detect(targetDir string) (ProjectConfig, error) {
 		}
 	}
 	return ProjectConfig{}, ErrUnsupportedProject
-}
-
-type rule struct {
-	filename string
-	project  ProjectType
 }
 
 func parseGoProject(targetDir string) (ProjectConfig, error) {
@@ -141,7 +142,8 @@ func parseNodeProject(targetDir string) (ProjectConfig, error) {
 	}
 
 	return ProjectConfig{
-		Type:           Node,
+		Type: Node,
+		// TODO: interactive CLI question for the runtime
 		RuntimeVersion: "22",
 		PackageManager: pm,
 	}, nil
@@ -157,7 +159,8 @@ func parsePythonProject(targetDir string) (ProjectConfig, error) {
 	}
 
 	return ProjectConfig{
-		Type:           Python,
+		Type: Python,
+		// TODO: interactive CLI question for the runtime
 		RuntimeVersion: "3.12",
 		PackageManager: pm,
 	}, nil
@@ -170,7 +173,7 @@ func fileExists(path string) (bool, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil
 		}
-
+		// TODO: custom message on errors
 		return false, err
 	}
 	return true, nil
