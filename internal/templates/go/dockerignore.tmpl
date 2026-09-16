@@ -1,0 +1,36 @@
+# Version control
+.git
+.gitignore
+
+# CI/CD and repository metadata
+.github
+README.md
+LICENSE
+
+# Environment files and credentials
+.env*
+!.env.example
+
+# Go build and test artifacts
+bin/
+dist/
+tmp/
+*.exe
+*.test
+*.out
+coverage.txt
+profile.out
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Dockerfiles and Compose files (avoid recursion into build context)
+Dockerfile*
+docker-compose*.yml
+compose*.yaml
+.dockerignore
