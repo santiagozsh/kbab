@@ -1,0 +1,103 @@
+# syntax=docker/dockerfile:1
+FROM node:{{.RuntimeVersion}}-alpine AS base
+
+# Install tini to handle PID 1 and kernel signals (SIGTERM/SIGINT) gracefully
+RUN apk add --no-cache tini
+
+WORKDIR /app
+
+# Enable corepack for pnpm and yarn support, or install bun
+{{if eq .PackageManager "pnpm"}}
+RUN corepack enable pnpm
+{{else if eq .PackageManager "yarn"}}
+RUN corepack enable yarn
+{{else if eq .PackageManager "bun"}}
+RUN npm install -g bun
+{{end}}
+
+# Stage 2: Dependencies - Install packages using BuildKit cache
+FROM base AS dev-deps
+
+WORKDIR /app
+
+COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* bun.lockb* ./
+
+# Install ALL dependencies (including devDependencies) using BuildKit cache
+{{if eq .PackageManager "pnpm"}}
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
+  pnpm install --frozen-lockfile
+{{else if eq .PackageManager "yarn"}}
+RUN --mount=type=cache,target=/root/.yarn/berry/cache \
+  yarn install --frozen-lockfile
+{{else if eq .PackageManager "bun"}}
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+  bun install --frozen-lockfile
+{{else}}
+RUN --mount=type=cache,target=/root/.npm \
+  npm ci
+{{end}}
+
+# Stage 3: Development - Hot-reload
+FROM dev-deps AS dev
+
+WORKDIR /app
+
+COPY . .
+
+ENV PORT={{.Port}}
+EXPOSE {{.Port}}
+
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD [ "{{.PackageManager}}", "run", "dev" ]
+
+# Stage 4: Builder - Compile TypeScript / build artifacts
+
+FROM dev-deps AS builder
+
+WORKDIR /app
+
+COPY . .
+
+RUN {{.PackageManager}} run build --if-present
+
+# Stage 5: Production Dependencies - Install ONLY runtime packages
+FROM base AS prod-deps
+
+WORKDIR /app
+
+COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* bun.lockb* ./
+
+# Install ONLY production dependencies using BuildKit cache
+{{if eq .PackageManager "pnpm"}}
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
+  pnpm install --prod --frozen-lockfile
+{{else if eq .PackageManager "yarn"}}
+RUN --mount=type=cache,target=/root/.yarn/berry/cache \
+  yarn install --production --frozen-lockfile
+{{else if eq .PackageManager "bun"}}
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+  bun install --production --frozen-lockfile
+{{else}}
+RUN --mount=type=cache,target=/root/.npm \
+  npm ci --omit=dev
+{{end}}
+
+# Stage 6: Production - Minimal and secure runtime
+FROM base AS prod
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# 1. Copy application code and built artifacts from builder
+COPY --chown=node:node --from=builder /app ./
+# 2. Overwrite node_modules with clean, production-only dependencies
+COPY --chown=node:node --from=prod-deps /app/node_modules ./node_modules
+
+USER node
+
+ENV PORT={{.Port}}
+EXPOSE {{.Port}}
+
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["{{.PackageManager}}", "start"]
