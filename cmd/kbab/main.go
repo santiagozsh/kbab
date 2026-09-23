@@ -4,23 +4,36 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/santiagozsh/kbab/internal/detector"
+	"github.com/spf13/cobra"
 )
 
 func main() {
-	targetDir := "."
-	if len(os.Args) > 1 {
-		targetDir = os.Args[1]
-	}
-
-	cfg, err := detector.Detect(targetDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	if err := newRootCmd().Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
 
-	fmt.Println("🚀 Project detected successfully!")
-	fmt.Printf("  Type:            %s\n", cfg.Type)
-	fmt.Printf("  Runtime Version: %s\n", cfg.RuntimeVersion)
-	fmt.Printf("  Package Manager: %s\n", cfg.PackageManager)
+func newRootCmd() *cobra.Command {
+	root := &cobra.Command{
+		Use:   "kbab",
+		Short: "Generate production-grade Dockerfiles and .dockerignore files",
+	}
+
+	create := &cobra.Command{
+		Use:   "create [path]",
+		Short: "Detect the project and generate container setup",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := "."
+			if len(args) > 0 {
+				path = args[0]
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "create: ", path)
+			return nil
+		},
+	}
+
+	root.AddCommand(create)
+	return root
 }
